@@ -1,53 +1,110 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consulta CEP - ViaCEP</title>
+    <title>Multi-Terminal: CEP & CNPJ</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>Consulta CEP - ViaCEP</h1>
-        <input type="text" id="cep" placeholder="Digite o CEP (8 dígitos)">
-        <button onclick="buscarCEP()">Buscar</button>
-        <div id="resultado"></div>
+        <h1>SISTEMA DE CONSULTA INTEGRADO</h1>
+        
+        <!-- MÓDULO CEP -->
+        <div class="modulo">
+            <label>MÓDULO 01: LOCALIZAÇÃO (CEP)</label>
+            <div class="input-group">
+                <input type="text" id="cep" placeholder="Digite o CEP (8 dígitos)">
+                <button onclick="buscarCEP()">BUSCAR CEP</button>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- MÓDULO CNPJ -->
+        <div class="modulo">
+            <label>MÓDULO 02: CORPORATIVO (CNPJ)</label>
+            <div class="input-group">
+                <input type="text" id="cnpj" placeholder="Digite o CNPJ (14 dígitos)">
+                <button onclick="buscarCNPJ()">BUSCAR CNPJ</button>
+            </div>
+        </div>
+
+        <!-- ÁREA DE RESULTADO ÚNICA -->
+        <div id="resultado">
+            <p class="blink">AGUARDANDO ENTRADA DE DADOS...</p>
+        </div>
     </div>
 
     <script>
+        const resultadoDiv = document.getElementById('resultado');
+
+        // --- FUNÇÃO BUSCAR CEP (ViaCEP) ---
         function buscarCEP() {
-    const cep = document.getElementById('cep').value;
-    const resultadoDiv = document.getElementById('resultado');
-
-    // Construir a URL da API ViaCEP
-    const url = `https://viacep.com.br/ws/${cep}/json/`;
-
-    // Fazer a requisição usando fetch
-    fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Erro na requisição: ${response.status}`);
+            const cep = document.getElementById('cep').value.replace(/\D/g, '');
+            if (cep.length !== 8) {
+                resultadoDiv.innerHTML = '<p style="color: #ff4e4e;">ERRO: CEP INVÁLIDO.</p>';
+                return;
             }
-            return response.json();
-        })
-        .then(data => {
-            if (data.erro) {
-                resultadoDiv.innerHTML = '<p style="color: red;">CEP não encontrado.</p>';
+
+            resultadoDiv.innerHTML = '<p class="loading">PROCESSANDO REQUISIÇÃO CEP...</p>';
+
+            fetch(`https://viacep.com.br/ws/${cep}/json/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.erro) {
+                        resultadoDiv.innerHTML = '<p style="color: #ff4e4e;">STATUS: CEP NÃO LOCALIZADO.</p>';
+                    } else {
+                        resultadoDiv.innerHTML = `
+                            <div class="data-log">
+                                <p><strong>LOGRADOURO:</strong> ${data.logradouro}</p>
+                                <p><strong>BAIRRO:</strong> ${data.bairro}</p>
+                                <p><strong>CIDADE:</strong> ${data.localidade} / ${data.uf}</p>
+                                <p><strong>IBGE:</strong> ${data.ibge}</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    resultadoDiv.innerHTML = `<p style="color: #ff4e4e;">FALHA NO SERVIDOR: ${error.message}</p>`;
+                });
+        }
+
+        // --- FUNÇÃO BUSCAR CNPJ (ReceitaWS) ---
+        function buscarCNPJ() {
+            const cnpj = document.getElementById('cnpj').value.replace(/\D/g, '');
+            if (cnpj.length !== 14) {
+                resultadoDiv.innerHTML = '<p style="color: #ff4e4e;">ERRO: CNPJ INVÁLIDO (USE 14 DÍGITOS).</p>';
+                return;
+            }
+
+            resultadoDiv.innerHTML = '<p class="loading">CONECTANDO AO BANCO RECEITAWS...</p>';
+
+            // Usando JSONP para evitar erro de CORS
+            const script = document.createElement('script');
+            script.src = `https://receitaws.com.br/v1/cnpj/${cnpj}?callback=processarCNPJ`;
+            document.body.appendChild(script);
+        }
+
+        // CALLBACK DO CNPJ
+        function processarCNPJ(data) {
+            if (data.status === "ERROR") {
+                resultadoDiv.innerHTML = `<p style="color: #ff4e4e;">ERRO API: ${data.message}</p>`;
             } else {
                 resultadoDiv.innerHTML = `
-                    <p><strong>CEP:</strong> ${data.cep}</p>
-                    <p><strong>Logradouro:</strong> ${data.logradouro}</p>
-                    <p><strong>Bairro:</strong> ${data.bairro}</p>
-                    <p><strong>Cidade:</strong> ${data.localidade}</p>
-                    <p><strong>Estado:</strong> ${data.uf}</p>
+                    <div class="data-log">
+                        <p><strong>RAZÃO SOCIAL:</strong> ${data.nome}</p>
+                        <p><strong>NOME FANTASIA:</strong> ${data.fantasia || 'NÃO INFORMADO'}</p>
+                        <p><strong>SITUAÇÃO:</strong> ${data.situacao}</p>
+                        <p><strong>ATIVIDADE:</strong> ${data.atividade_principal[0].text}</p>
+                        <p><strong>CAPITAL:</strong> R$ ${parseFloat(data.capital_social).toLocaleString('pt-BR')}</p>
+                    </div>
                 `;
             }
-        })
-        .catch(error => {
-            resultadoDiv.innerHTML = `<p style="color: red;">Erro ao buscar CEP: ${error.message}</p>`;
-        });
-}
-
+            // Limpa o script após uso
+            const script = document.querySelector(`script[src*="processarCNPJ"]`);
+            if (script) script.remove();
+        }
     </script>
 </body>
 </html>
